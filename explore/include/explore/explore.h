@@ -37,19 +37,19 @@
 #ifndef NAV_EXPLORE_H_
 #define NAV_EXPLORE_H_
 
+#include <actionlib/client/simple_action_client.h>
+#include <explore/costmap_client.h>
+#include <explore/frontier_search.h>
+#include <geometry_msgs/PoseStamped.h>
+#include <move_base_msgs/MoveBaseAction.h>
+#include <ros/ros.h>
+#include <std_srvs/Empty.h>
+#include <visualization_msgs/MarkerArray.h>
+
 #include <memory>
 #include <mutex>
 #include <string>
 #include <vector>
-
-#include <actionlib/client/simple_action_client.h>
-#include <geometry_msgs/PoseStamped.h>
-#include <move_base_msgs/MoveBaseAction.h>
-#include <ros/ros.h>
-#include <visualization_msgs/MarkerArray.h>
-
-#include <explore/costmap_client.h>
-#include <explore/frontier_search.h>
 
 namespace explore
 {
@@ -66,6 +66,7 @@ public:
 
   void start();
   void stop();
+  void saveMap();
 
 private:
   /**
@@ -76,8 +77,7 @@ private:
   /**
    * @brief  Publish a frontiers as markers
    */
-  void visualizeFrontiers(
-      const std::vector<frontier_exploration::Frontier>& frontiers);
+  void visualizeFrontiers(const std::vector<frontier_exploration::Frontier>& frontiers);
 
   void reachedGoal(const actionlib::SimpleClientGoalState& status,
                    const move_base_msgs::MoveBaseResultConstPtr& result,
@@ -85,14 +85,18 @@ private:
 
   bool goalOnBlacklist(const geometry_msgs::Point& goal);
 
+  bool StartExploration(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+  bool StopExploration(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+  bool SaveMap(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+
   ros::NodeHandle private_nh_;
   ros::NodeHandle relative_nh_;
   ros::Publisher marker_array_publisher_;
   tf::TransformListener tf_listener_;
+  ros::ServiceServer _explorationStartSrv, _explorationStopSrv, _mapSaveSrv;
 
   Costmap2DClient costmap_client_;
-  actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction>
-      move_base_client_;
+  actionlib::SimpleActionClient<move_base_msgs::MoveBaseAction> move_base_client_;
   frontier_exploration::FrontierSearch search_;
   ros::Timer exploring_timer_;
   ros::Timer oneshot_;
@@ -107,8 +111,9 @@ private:
   double planner_frequency_;
   double potential_scale_, orientation_scale_, gain_scale_;
   ros::Duration progress_timeout_;
-  bool visualize_;
+  bool visualize_, auto_save_map_;
+  std::string map_save_location_;
 };
-}
+}  // namespace explore
 
 #endif

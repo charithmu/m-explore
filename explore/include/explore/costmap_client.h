@@ -116,9 +116,9 @@ protected:
 
   const tf::TransformListener* const tf_;  ///< @brief Used for transforming
                                            /// point clouds
-  std::string global_frame_;      ///< @brief The global frame for the costmap
-  std::string robot_base_frame_;  ///< @brief The frame_id of the robot base
-  double transform_tolerance_;    ///< timeout before transform errors
+  std::string global_frame_;               ///< @brief The global frame for the costmap
+  std::string robot_base_frame_;           ///< @brief The frame_id of the robot base
+  double transform_tolerance_;             ///< timeout before transform errors
 
 private:
   // will be unsubscribed at destruction

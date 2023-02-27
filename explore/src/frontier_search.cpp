@@ -1,22 +1,19 @@
+#include <costmap_2d/cost_values.h>
+#include <costmap_2d/costmap_2d.h>
+#include <explore/costmap_tools.h>
 #include <explore/frontier_search.h>
+#include <geometry_msgs/Point.h>
 
 #include <mutex>
 
-#include <costmap_2d/cost_values.h>
-#include <costmap_2d/costmap_2d.h>
-#include <geometry_msgs/Point.h>
-
-#include <explore/costmap_tools.h>
-
 namespace frontier_exploration
 {
+using costmap_2d::FREE_SPACE;
 using costmap_2d::LETHAL_OBSTACLE;
 using costmap_2d::NO_INFORMATION;
-using costmap_2d::FREE_SPACE;
 
-FrontierSearch::FrontierSearch(costmap_2d::Costmap2D* costmap,
-                               double potential_scale, double gain_scale,
-                               double min_frontier_size)
+FrontierSearch::FrontierSearch(costmap_2d::Costmap2D* costmap, double potential_scale,
+                               double gain_scale, double min_frontier_size)
   : costmap_(costmap)
   , potential_scale_(potential_scale)
   , gain_scale_(gain_scale)
@@ -75,8 +72,7 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position)
       } else if (isNewFrontierCell(nbr, frontier_flag)) {
         frontier_flag[nbr] = true;
         Frontier new_frontier = buildNewFrontier(nbr, pos, frontier_flag);
-        if (new_frontier.size * costmap_->getResolution() >=
-            min_frontier_size_) {
+        if (new_frontier.size * costmap_->getResolution() >= min_frontier_size_) {
           frontier_list.push_back(new_frontier);
         }
       }
@@ -87,15 +83,13 @@ std::vector<Frontier> FrontierSearch::searchFrom(geometry_msgs::Point position)
   for (auto& frontier : frontier_list) {
     frontier.cost = frontierCost(frontier);
   }
-  std::sort(
-      frontier_list.begin(), frontier_list.end(),
-      [](const Frontier& f1, const Frontier& f2) { return f1.cost < f2.cost; });
+  std::sort(frontier_list.begin(), frontier_list.end(),
+            [](const Frontier& f1, const Frontier& f2) { return f1.cost < f2.cost; });
 
   return frontier_list;
 }
 
-Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
-                                          unsigned int reference,
+Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell, unsigned int reference,
                                           std::vector<bool>& frontier_flag)
 {
   // initialize frontier structure
@@ -169,8 +163,7 @@ Frontier FrontierSearch::buildNewFrontier(unsigned int initial_cell,
   return output;
 }
 
-bool FrontierSearch::isNewFrontierCell(unsigned int idx,
-                                       const std::vector<bool>& frontier_flag)
+bool FrontierSearch::isNewFrontierCell(unsigned int idx, const std::vector<bool>& frontier_flag)
 {
   // check that cell is unknown and not already marked as frontier
   if (map_[idx] != NO_INFORMATION || frontier_flag[idx]) {
@@ -190,8 +183,7 @@ bool FrontierSearch::isNewFrontierCell(unsigned int idx,
 
 double FrontierSearch::frontierCost(const Frontier& frontier)
 {
-  return (potential_scale_ * frontier.min_distance *
-          costmap_->getResolution()) -
+  return (potential_scale_ * frontier.min_distance * costmap_->getResolution()) -
          (gain_scale_ * frontier.size * costmap_->getResolution());
 }
-}
+}  // namespace frontier_exploration

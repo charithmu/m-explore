@@ -37,10 +37,11 @@
 
 #include <explore/explore.h>
 
+#include <cstdlib>
+#include <string>
 #include <thread>
 
-inline static bool operator==(const geometry_msgs::Point& one,
-                              const geometry_msgs::Point& two)
+inline static bool operator==(const geometry_msgs::Point& one, const geometry_msgs::Point& two)
 {
   double dx = one.x - two.x;
   double dy = one.y - two.y;
@@ -68,10 +69,11 @@ Explore::Explore()
   private_nh_.param("orientation_scale", orientation_scale_, 0.0);
   private_nh_.param("gain_scale", gain_scale_, 1.0);
   private_nh_.param("min_frontier_size", min_frontier_size, 0.5);
+  private_nh_.param("auto_save_map", auto_save_map_, true);
+  private_nh_.param<std::string>("map_save_location", map_save_location_, "exploration-map");
 
-  search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(),
-                                                 potential_scale_, gain_scale_,
-                                                 min_frontier_size);
+  search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(), potential_scale_,
+                                                 gain_scale_, min_frontier_size);
 
   if (visualize_) {
     marker_array_publisher_ =
@@ -82,9 +84,13 @@ Explore::Explore()
   move_base_client_.waitForServer();
   ROS_INFO("Connected to move_base server");
 
-  exploring_timer_ =
-      relative_nh_.createTimer(ros::Duration(1. / planner_frequency_),
-                               [this](const ros::TimerEvent&) { makePlan(); });
+  // services
+  _explorationStartSrv = private_nh_.advertiseService("startExploration", &Explore::StartExploration, this);
+  _explorationStopSrv = private_nh_.advertiseService("stopExploration", &Explore::StopExploration, this);
+  _mapSaveSrv = private_nh_.advertiseService("saveCurrentMap", &Explore::SaveMap, this);
+
+  exploring_timer_ = relative_nh_.createTimer(ros::Duration(1. / planner_frequency_),
+                                              [this](const ros::TimerEvent&) { makePlan(); });
 }
 
 Explore::~Explore()
@@ -92,8 +98,7 @@ Explore::~Explore()
   stop();
 }
 
-void Explore::visualizeFrontiers(
-    const std::vector<frontier_exploration::Frontier>& frontiers)
+void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontier>& frontiers)
 {
   std_msgs::ColorRGBA blue;
   blue.r = 0;
@@ -139,6 +144,7 @@ void Explore::visualizeFrontiers(
     m.type = visualization_msgs::Marker::POINTS;
     m.id = int(id);
     m.pose.position = {};
+    m.pose.orientation.w = 1.;
     m.scale.x = 0.1;
     m.scale.y = 0.1;
     m.scale.z = 0.1;
@@ -153,6 +159,7 @@ void Explore::visualizeFrontiers(
     m.type = visualization_msgs::Marker::SPHERE;
     m.id = int(id);
     m.pose.position = frontier.initial;
+    m.pose.orientation.w = 1.;
     // scale frontier according to its cost (costier frontiers will be smaller)
     double scale = std::min(std::abs(min_cost * 0.4 / frontier.cost), 0.5);
     m.scale.x = scale;
@@ -182,7 +189,8 @@ void Explore::makePlan()
   auto pose = costmap_client_.getRobotPose();
   // get frontiers sorted according to cost
   auto frontiers = search_.searchFrom(pose.position);
-  ROS_DEBUG("found %lu frontiers", frontiers.size());
+
+  ROS_INFO("found %lu frontiers", frontiers.size());
   for (size_t i = 0; i < frontiers.size(); ++i) {
     ROS_DEBUG("frontier %zd cost: %f", i, frontiers[i].cost);
   }
@@ -198,11 +206,9 @@ void Explore::makePlan()
   }
 
   // find non blacklisted frontier
-  auto frontier =
-      std::find_if_not(frontiers.begin(), frontiers.end(),
-                       [this](const frontier_exploration::Frontier& f) {
-                         return goalOnBlacklist(f.centroid);
-                       });
+  auto frontier = std::find_if_not(
+      frontiers.begin(), frontiers.end(),
+      [this](const frontier_exploration::Frontier& f) { return goalOnBlacklist(f.centroid); });
   if (frontier == frontiers.end()) {
     stop();
     return;
@@ -237,9 +243,8 @@ void Explore::makePlan()
   goal.target_pose.header.frame_id = costmap_client_.getGlobalFrameID();
   goal.target_pose.header.stamp = ros::Time::now();
   move_base_client_.sendGoal(
-      goal, [this, target_position](
-                const actionlib::SimpleClientGoalState& status,
-                const move_base_msgs::MoveBaseResultConstPtr& result) {
+      goal, [this, target_position](const actionlib::SimpleClientGoalState& status,
+                                    const move_base_msgs::MoveBaseResultConstPtr& result) {
         reachedGoal(status, result, target_position);
       });
 }
@@ -262,7 +267,7 @@ bool Explore::goalOnBlacklist(const geometry_msgs::Point& goal)
 }
 
 void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
-                          const move_base_msgs::MoveBaseResultConstPtr&,
+                          const move_base_msgs::MoveBaseResultConstPtr& result,
                           const geometry_msgs::Point& frontier_goal)
 {
   ROS_DEBUG("Reached goal with status: %s", status.toString().c_str());
@@ -276,13 +281,43 @@ void Explore::reachedGoal(const actionlib::SimpleClientGoalState& status,
   // callback for sendGoal, which is called in makePlan). the timer must live
   // until callback is executed.
   oneshot_ = relative_nh_.createTimer(
-      ros::Duration(0, 0), [this](const ros::TimerEvent&) { makePlan(); },
-      true);
+      ros::Duration(0, 0), [this](const ros::TimerEvent&) { makePlan(); }, true);
+}
+
+bool Explore::StartExploration(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
+{
+  ROS_INFO("Request received to start exploration.");
+  start();
+  return true;
+}
+
+bool Explore::StopExploration(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
+{
+  ROS_INFO("Request received to stop exploration.");
+  stop();
+  return true;
+}
+
+bool Explore::SaveMap(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res)
+{
+  ROS_INFO("Request received to save current map.");
+  saveMap();
+  return true;
+}
+
+void Explore::saveMap()
+{
+  ROS_INFO("Saving current map.");
+  ROS_INFO(map_save_location_.c_str(),"junk"); // "junk" is used to avoid -Wformat-security
+  std::string map_saver_node = "rosrun map_server map_saver -f " + map_save_location_ + " ";
+  (void)!std::system(map_saver_node.c_str()); // (void)! is used to avoid -Wunused-result
+  ROS_INFO("Map Saved.");
 }
 
 void Explore::start()
 {
   exploring_timer_.start();
+  ROS_INFO("Exploration started.");
 }
 
 void Explore::stop()
@@ -290,6 +325,29 @@ void Explore::stop()
   move_base_client_.cancelAllGoals();
   exploring_timer_.stop();
   ROS_INFO("Exploration stopped.");
+
+  if (auto_save_map_) {
+    saveMap();
+  }
+
+  ROS_INFO("Navigating to origin.");
+  move_base_msgs::MoveBaseGoal origin;
+  origin.target_pose.pose.position.x = 0;
+  origin.target_pose.pose.position.z = 0;
+  origin.target_pose.pose.position.y = 0;
+  origin.target_pose.pose.orientation.w = 1.;
+  origin.target_pose.header.frame_id = costmap_client_.getGlobalFrameID();
+  origin.target_pose.header.stamp = ros::Time::now();
+
+  move_base_client_.sendGoal(origin, [this](const actionlib::SimpleClientGoalState& status,
+                                            const move_base_msgs::MoveBaseResultConstPtr& result) {
+    ROS_DEBUG("Reached map origin with status: %s", status.toString().c_str());
+    if (status == actionlib::SimpleClientGoalState::SUCCEEDED) {
+      ROS_INFO("Reached map origin sucessfully.");
+    } else {
+      ROS_INFO("Reaching map origin was not sucessfull.");
+    }
+  });
 }
 
 }  // namespace explore
@@ -297,8 +355,8 @@ void Explore::stop()
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "explore");
-  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME,
-                                     ros::console::levels::Debug)) {
+  // Set here Debug or Info
+  if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info)) {
     ros::console::notifyLoggerLevelsChanged();
   }
   explore::Explore explore;
