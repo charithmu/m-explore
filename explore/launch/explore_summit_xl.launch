@@ -2,19 +2,20 @@
     <group ns="summit_xl">
 
         <include file="$(find explore_lite)/launch/explore.launch">
-            <arg name="robot_base_frame" default="summit_xl_base_link"/>
-            <arg name="costmap_topic" default="map"/>
-            <arg name="costmap_updates_topic" default="map_updates"/>
-            <arg name="visualize" default="true"/>
-            <arg name="planner_frequency" default="1.0"/>
-            <arg name="progress_timeout" default="10.0"/>
-            <arg name="potential_scale" default="2.0"/>
-            <arg name="orientation_scale" default="0.0"/>
-            <arg name="gain_scale" default="5.0"/>
-            <arg name="transform_tolerance" default="0.3"/>
-            <arg name="min_frontier_size" default="0.5"/>
-            <arg name="auto_save_map" default="true"/>
-            <arg name="map_save_location" default="/home/charith/dev/rosws/icc_lab_ws/src/icclab_summit_xl/maps/expo_tests/exploration-map"/>
+            <arg name="robot_base_frame"        default="summit_xl_base_link"/>
+            <arg name="costmap_topic"           default="map"/>
+            <arg name="costmap_updates_topic"   default="map_updates"/>
+            <arg name="visualize"               default="true"/>
+            <arg name="planner_frequency"       default="1.0"/>
+            <arg name="progress_timeout"        default="15.0"/>
+            <arg name="potential_scale"         default="2.0"/>
+            <arg name="orientation_scale"       default="0.0"/>
+            <arg name="gain_scale"              default="5.0"/>
+            <arg name="transform_tolerance"     default="0.3"/>
+            <arg name="min_frontier_size"       default="0.7"/>
+            <arg name="auto_save_map"           default="true"/>
+            <arg name="auto_start_exploration"  default="false"/>
+            <arg name="map_save_location"       default="/home/charith/dev/rosws/icc_lab_ws/src/icclab_summit_xl/maps/expo_tests/exploration-map"/>
         </include>
 
     </group>

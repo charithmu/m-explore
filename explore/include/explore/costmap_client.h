@@ -61,7 +61,7 @@ public:
    * @param tf_listener Will be used for transformation of robot pose.
    */
   Costmap2DClient(ros::NodeHandle& param_nh, ros::NodeHandle& subscription_nh,
-                  const tf::TransformListener* tf_listener);
+                  const tf::TransformListener* tf_listener, bool activate);
   /**
    * @brief Get the pose of the robot in the global frame of the costmap
    * @return pose of the robot in the global frame of the costmap
@@ -108,6 +108,10 @@ public:
     return robot_base_frame_;
   }
 
+  void activate();
+
+  void deactivate();
+
 protected:
   void updateFullMap(const nav_msgs::OccupancyGrid::ConstPtr& msg);
   void updatePartialMap(const map_msgs::OccupancyGridUpdate::ConstPtr& msg);
@@ -124,6 +128,7 @@ private:
   // will be unsubscribed at destruction
   ros::Subscriber costmap_sub_;
   ros::Subscriber costmap_updates_sub_;
+  bool active_;
 };
 
 }  // namespace explore

@@ -54,10 +54,11 @@ namespace explore
 Explore::Explore()
   : private_nh_("~")
   , tf_listener_(ros::Duration(10.0))
-  , costmap_client_(private_nh_, relative_nh_, &tf_listener_)
+  , costmap_client_(private_nh_, relative_nh_, &tf_listener_, false)
   , move_base_client_("move_base")
   , prev_distance_(0)
   , last_markers_count_(0)
+  , active_(false)
 {
   double timeout;
   double min_frontier_size;
@@ -70,6 +71,7 @@ Explore::Explore()
   private_nh_.param("gain_scale", gain_scale_, 1.0);
   private_nh_.param("min_frontier_size", min_frontier_size, 0.5);
   private_nh_.param("auto_save_map", auto_save_map_, true);
+  private_nh_.param("auto_start_exploration", auto_start_exploration_, false);
   private_nh_.param<std::string>("map_save_location", map_save_location_, "exploration-map");
 
   search_ = frontier_exploration::FrontierSearch(costmap_client_.getCostmap(), potential_scale_,
@@ -85,12 +87,20 @@ Explore::Explore()
   ROS_INFO("Connected to move_base server");
 
   // services
-  _explorationStartSrv = private_nh_.advertiseService("startExploration", &Explore::StartExploration, this);
-  _explorationStopSrv = private_nh_.advertiseService("stopExploration", &Explore::StopExploration, this);
+  _explorationStartSrv =
+      private_nh_.advertiseService("startExploration", &Explore::StartExploration, this);
+  _explorationStopSrv =
+      private_nh_.advertiseService("stopExploration", &Explore::StopExploration, this);
   _mapSaveSrv = private_nh_.advertiseService("saveCurrentMap", &Explore::SaveMap, this);
 
   exploring_timer_ = relative_nh_.createTimer(ros::Duration(1. / planner_frequency_),
                                               [this](const ros::TimerEvent&) { makePlan(); });
+
+  active_ = auto_start_exploration_;
+  if(active_){
+    costmap_client_.activate();
+  }
+
 }
 
 Explore::~Explore()
@@ -100,16 +110,20 @@ Explore::~Explore()
 
 void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontier>& frontiers)
 {
+  if (!active_) {
+    return;
+  }
+
   std_msgs::ColorRGBA blue;
   blue.r = 0;
   blue.g = 0;
   blue.b = 1.0;
-  blue.a = 1.0;
+  blue.a = 0.8;
   std_msgs::ColorRGBA red;
   red.r = 1.0;
   red.g = 0;
   red.b = 0;
-  red.a = 1.0;
+  red.a = 0.8;
   std_msgs::ColorRGBA green;
   green.r = 0;
   green.g = 1.0;
@@ -137,6 +151,7 @@ void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontie
 
   // weighted frontiers are always sorted
   double min_cost = frontiers.empty() ? 0. : frontiers.front().cost;
+  double max_cost = frontiers.empty() ? 0. : frontiers.back().cost;
 
   m.action = visualization_msgs::Marker::ADD;
   size_t id = 0;
@@ -145,9 +160,9 @@ void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontie
     m.id = int(id);
     m.pose.position = {};
     m.pose.orientation.w = 1.;
-    m.scale.x = 0.1;
-    m.scale.y = 0.1;
-    m.scale.z = 0.1;
+    m.scale.x = 0.05;
+    m.scale.y = 0.05;
+    m.scale.z = 0.05;
     m.points = frontier.points;
     if (goalOnBlacklist(frontier.centroid)) {
       m.color = red;
@@ -161,7 +176,8 @@ void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontie
     m.pose.position = frontier.initial;
     m.pose.orientation.w = 1.;
     // scale frontier according to its cost (costier frontiers will be smaller)
-    double scale = std::min(std::abs(min_cost * 0.4 / frontier.cost), 0.5);
+    // double scale = std::min(std::abs(min_cost * 0.6 / frontier.cost), 0.6);
+    double scale = std::max((frontier.cost - min_cost) / (min_cost - max_cost), 0.1); // normalize to  0.1 - 1.0
     m.scale.x = scale;
     m.scale.y = scale;
     m.scale.z = scale;
@@ -185,6 +201,10 @@ void Explore::visualizeFrontiers(const std::vector<frontier_exploration::Frontie
 
 void Explore::makePlan()
 {
+  if (!active_) {
+    return;
+  }
+
   // find frontiers
   auto pose = costmap_client_.getRobotPose();
   // get frontiers sorted according to cost
@@ -308,22 +328,27 @@ bool Explore::SaveMap(std_srvs::Empty::Request& req, std_srvs::Empty::Response& 
 void Explore::saveMap()
 {
   ROS_INFO("Saving current map.");
-  ROS_INFO(map_save_location_.c_str(),"junk"); // "junk" is used to avoid -Wformat-security
+  ROS_INFO(map_save_location_.c_str(), "junk");  // "junk" is used to avoid -Wformat-security
   std::string map_saver_node = "rosrun map_server map_saver -f " + map_save_location_ + " ";
-  (void)!std::system(map_saver_node.c_str()); // (void)! is used to avoid -Wunused-result
+  (void)!std::system(map_saver_node.c_str());  // (void)! is used to avoid -Wunused-result
   ROS_INFO("Map Saved.");
 }
 
 void Explore::start()
 {
-  exploring_timer_.start();
   ROS_INFO("Exploration started.");
+
+  exploring_timer_.start();
+
+  active_ = true;
+  costmap_client_.activate();
 }
 
 void Explore::stop()
 {
   move_base_client_.cancelAllGoals();
   exploring_timer_.stop();
+
   ROS_INFO("Exploration stopped.");
 
   if (auto_save_map_) {
@@ -348,6 +373,9 @@ void Explore::stop()
       ROS_INFO("Reaching map origin was not sucessfull.");
     }
   });
+
+  active_ = false;
+  costmap_client_.deactivate();
 }
 
 }  // namespace explore

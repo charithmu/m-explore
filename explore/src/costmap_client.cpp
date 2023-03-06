@@ -47,8 +47,9 @@ std::array<unsigned char, 256> init_translation_table();
 static const std::array<unsigned char, 256> cost_translation_table__ = init_translation_table();
 
 Costmap2DClient::Costmap2DClient(ros::NodeHandle& param_nh, ros::NodeHandle& subscription_nh,
-                                 const tf::TransformListener* tf)
+                                 const tf::TransformListener* tf, bool activate)
   : tf_(tf)
+  , active_(activate)
 {
   std::string costmap_topic;
   std::string footprint_topic;
@@ -64,7 +65,8 @@ Costmap2DClient::Costmap2DClient(ros::NodeHandle& param_nh, ros::NodeHandle& sub
       costmap_topic, 1000,
       [this](const nav_msgs::OccupancyGrid::ConstPtr& msg) { updateFullMap(msg); });
 
-  ROS_INFO("Waiting for costmap to become available, topic: (namespace_prefix/) %s", costmap_topic.c_str());
+  ROS_INFO("Waiting for costmap to become available, topic: (namespace_prefix/) %s",
+           costmap_topic.c_str());
 
   auto costmap_msg =
       ros::topic::waitForMessage<nav_msgs::OccupancyGrid>(costmap_topic, subscription_nh);
@@ -103,8 +105,22 @@ Costmap2DClient::Costmap2DClient(ros::NodeHandle& param_nh, ros::NodeHandle& sub
   }
 }
 
+void Costmap2DClient::activate()
+{
+  active_ = true;
+}
+
+void Costmap2DClient::deactivate()
+{
+  active_ = false;
+}
+
 void Costmap2DClient::updateFullMap(const nav_msgs::OccupancyGrid::ConstPtr& msg)
 {
+  // if (!active_) {
+  //   return;
+  // }
+
   global_frame_ = msg->header.frame_id;
 
   unsigned int size_in_cells_x = msg->info.width;
@@ -133,6 +149,10 @@ void Costmap2DClient::updateFullMap(const nav_msgs::OccupancyGrid::ConstPtr& msg
 
 void Costmap2DClient::updatePartialMap(const map_msgs::OccupancyGridUpdate::ConstPtr& msg)
 {
+  // if (!active_) {
+  //   return;
+  // }
+
   ROS_DEBUG("received partial map update");
   global_frame_ = msg->header.frame_id;
 

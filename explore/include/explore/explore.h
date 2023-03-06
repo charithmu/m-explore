@@ -100,6 +100,7 @@ private:
   frontier_exploration::FrontierSearch search_;
   ros::Timer exploring_timer_;
   ros::Timer oneshot_;
+  bool active_;
 
   std::vector<geometry_msgs::Point> frontier_blacklist_;
   geometry_msgs::Point prev_goal_;
@@ -111,7 +112,7 @@ private:
   double planner_frequency_;
   double potential_scale_, orientation_scale_, gain_scale_;
   ros::Duration progress_timeout_;
-  bool visualize_, auto_save_map_;
+  bool visualize_, auto_save_map_, auto_start_exploration_;
   std::string map_save_location_;
 };
 }  // namespace explore

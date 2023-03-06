@@ -12,6 +12,7 @@
     <arg name="transform_tolerance"   default="0.3"/>
     <arg name="min_frontier_size"     default="0.75"/>
     <arg name="auto_save_map"         default="true"/>
+    <arg name="auto_start_exploration"  default="false"/>
     <arg name="map_save_location"     default="$(dirname)/../exploration-map"/>
 
   <node pkg="explore_lite" type="explore" respawn="false" name="explore" output="screen">
@@ -27,6 +28,7 @@
     <param name="transform_tolerance"   value="$(arg transform_tolerance)"/>
     <param name="min_frontier_size"     value="$(arg min_frontier_size)"/>
     <param name="auto_save_map"         value="$(arg auto_save_map)"/>
+    <param name="auto_start_exploration"  value="$(arg auto_start_exploration)"/>
     <param name="map_save_location"     value="$(arg map_save_location)"/>
   </node>
 </launch>
